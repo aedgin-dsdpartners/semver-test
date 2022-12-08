@@ -1,0 +1,40 @@
+name: Lint & Test code and then deploy to Dev env
+
+on:
+  push:
+    branches: 'dev'
+
+# To be abstracted for deploying to ECS
+env:
+  INVOI_DEV_REGION: us-east-1
+  INVOI_DEV_ACCESS_KEY_ID: #${{ secrets.INVOI_AWS_ACCESS_KEY_ID }}
+  INVOI_DEV_SECRET_ACCESS_KEY: #${{ secrets.INVOI_AWS_SECRET_ACCESS_KEY }}
+  INVOI_DEV_EXECUTION_ROLE: arn:aws:iam::<account#>:role/<role-name>
+permissions:
+  contents: read
+
+jobs:
+  Deploy:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Assume the testing pipeline user role
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ env.INVOI_DEV_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.INVOI_DEV_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.INVOI_DEV_REGION }}
+          role-to-assume: ${{ env.INVOI_DEV_EXECUTION_ROLE }}
+          role-session-name: dev-deployment
+          role-duration-seconds: 3600
+          role-skip-session-tagging: true
+
+      - uses: hashicorp/setup-terraform@v2
+      - name: Terraform Validation
+        run: |
+          cd ./application/
+          terraform init
+          terraform validate
+          terraform apply -var-file="./aws_env/dev.tfvars"
